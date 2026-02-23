@@ -1,4 +1,5 @@
 /target
+/ovmf
 
 image.hdd
 esp/boot/kernel
