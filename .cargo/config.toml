@@ -1,0 +1,11 @@
+[build]
+target = "x86_64-unknown-none"
+
+[unstable]
+build-std = ["core"]
+
+[target.x86_64-unknown-none]
+rustflags = [
+    "-C", "link-arg=-Tlink.ld",
+    "-C", "link-arg=-no-pie"
+]
