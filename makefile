@@ -22,9 +22,12 @@ QEMU_FLAGS := -display sdl \
               -hda $(IMAGE) \
               -serial stdio
 
-.PHONY: all clean run cargo-build
+.PHONY: all install clean run cargo-build
 
 all: $(IMAGE)
+
+install: $(ESP_KERNEL)
+	@sudo cp -u $(ESP_KERNEL) /boot/custom/kernel
 
 cargo-build:
 	@cargo build --release
