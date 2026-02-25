@@ -12,12 +12,12 @@ mod terminal;
 use logger::*;
 use pmm::*;
 use requests::{BASE_REVISION, MP_REQUEST};
-use x86_64::PrivilegeLevel;
 use x86_64::instructions::segmentation::{CS, DS, ES, FS, GS, SS};
 use x86_64::registers::model_specific::GsBase;
 use x86_64::registers::segmentation::Segment;
 use x86_64::structures::gdt::{Descriptor, GlobalDescriptorTable, SegmentSelector};
-use x86_64::structures::idt::InterruptDescriptorTable;
+use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame};
+use x86_64::{PrivilegeLevel, VirtAddr};
 
 use crate::panic::idle;
 
@@ -29,21 +29,7 @@ struct TlsData {
     gdt_addr: u64,
 }
 
-fn cpu_id() -> u32 {
-    let cpu_id: u32;
-    unsafe {
-        core::arch::asm!("mov {0:e}, gs:[0]", out(reg) cpu_id);
-    }
-    cpu_id
-}
-
-fn get_tls() -> &'static mut TlsData {
-    let tls_addr = GsBase::read();
-    unsafe { &mut *(tls_addr.as_u64() as *mut TlsData) }
-}
-
-// Each CPU gets it's own TLS page, where currently only the CPU ID is stored.
-fn setup_tls(cpu: &limine::mp::Cpu) {
+fn alloc_tls() -> &'static mut TlsData {
     let tls_addr = alloc_frames(1)
         .map(|f| phys_to_virt(f.start))
         .expect("Out of memory");
@@ -52,9 +38,31 @@ fn setup_tls(cpu: &limine::mp::Cpu) {
 
     let tls_data = unsafe { &mut *(tls_addr.as_mut_ptr::<TlsData>()) };
     *tls_data = TlsData::default();
-    tls_data.cpu_id = cpu.id;
 
-    GsBase::write(tls_addr);
+    tls_data
+}
+
+// Each CPU gets it's own TLS page.
+fn setup_tls(cpu: &limine::mp::Cpu) {
+    let tls = alloc_tls();
+    tls.cpu_id = cpu.id;
+
+    GsBase::write(VirtAddr::new(tls as *const _ as u64));
+}
+
+// This should only be called after TLS is set up, otherwise it will panic.
+fn cpu_id() -> u32 {
+    // Temporary check, will be removed eventually.
+    let gs_base = GsBase::read();
+    if gs_base.is_null() {
+        panic!("TLS not set up yet");
+    }
+
+    let cpu_id: u32;
+    unsafe {
+        core::arch::asm!("mov {0:e}, gs:[0]", out(reg) cpu_id);
+    }
+    cpu_id
 }
 
 // The IDT structure fits perfectly in one page,
@@ -76,25 +84,22 @@ fn alloc_idt() -> &'static mut InterruptDescriptorTable {
 fn setup_idt() {
     let idt = alloc_idt();
 
-    populate_idt(idt);
-    idt.load();
-
-    let tls = get_tls();
-    tls.idt_addr = idt as *const _ as u64;
-}
-
-fn populate_idt(idt: &mut InterruptDescriptorTable) {
     unsafe {
         idt.breakpoint
-            .set_handler_fn(handler)
+            .set_handler_fn(breakpoint_handler)
             .set_code_selector(KERNEL_CS)
             .set_privilege_level(PrivilegeLevel::Ring3);
     }
-
     // TODO: set up more handlers, at least for the exceptions.
+
+    idt.load();
+
+    unsafe {
+        core::arch::asm!("mov gs:[8], {0}", in(reg) idt as *const _ as u64);
+    }
 }
 
-extern "x86-interrupt" fn handler(_stack_frame: x86_64::structures::idt::InterruptStackFrame) {
+extern "x86-interrupt" fn breakpoint_handler(_stack_frame: InterruptStackFrame) {
     // This is unsafe and could deadlock, but for now, it's ok.
     // Eventually, we should use per CPU buffers and a background thread to print them.
     println!("Breakpoint Exception Handler called on CPU {}", cpu_id());
@@ -140,6 +145,9 @@ fn setup_gdt() {
 
     gdt.load();
 
+    // At this point, the segment registers index bad entries,
+    // since the underlying table has changed, isn't this a problem?
+
     // Update the segment registers accordingly.
     unsafe {
         CS::set_reg(KERNEL_CS);
@@ -154,8 +162,9 @@ fn setup_gdt() {
         GsBase::write(gs_base);
     }
 
-    let tls = get_tls();
-    tls.gdt_addr = gdt as *const _ as u64;
+    unsafe {
+        core::arch::asm!("mov gs:[16], {0}", in(reg) gdt as *const _ as u64);
+    }
 }
 
 extern "C" fn common_entry(cpu: &limine::mp::Cpu) -> ! {
@@ -191,7 +200,7 @@ extern "C" fn kmain() -> ! {
 
     pmm_init();
 
-    let mp_resp = MP_REQUEST.get_response().unwrap();
+    let mp_resp = MP_REQUEST.get_response().expect("No MP response");
     let mut bsp_cpu = None;
 
     for cpu in mp_resp.cpus() {
