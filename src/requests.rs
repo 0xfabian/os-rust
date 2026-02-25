@@ -6,7 +6,7 @@ use limine::request::{
 
 #[used]
 #[unsafe(link_section = ".requests")]
-pub static BASE_REVISION: BaseRevision = BaseRevision::new();
+pub static BASE_REVISION: BaseRevision = BaseRevision::with_revision(5);
 
 #[used]
 #[unsafe(link_section = ".requests")]
