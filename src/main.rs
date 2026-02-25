@@ -11,7 +11,7 @@ mod terminal;
 
 use logger::*;
 use pmm::*;
-use requests::{BASE_REVISION, MP_REQUEST};
+use requests::{BASE_REVISION, BOOTLOADER_INFO_REQUEST, MP_REQUEST};
 use x86_64::instructions::segmentation::{CS, DS, ES, FS, GS, SS};
 use x86_64::registers::model_specific::GsBase;
 use x86_64::registers::segmentation::Segment;
@@ -102,8 +102,7 @@ fn setup_idt() {
 extern "x86-interrupt" fn breakpoint_handler(_stack_frame: InterruptStackFrame) {
     // This is unsafe and could deadlock, but for now, it's ok.
     // Eventually, we should use per CPU buffers and a background thread to print them.
-    println!("Breakpoint Exception Handler called on CPU {}", cpu_id());
-    idle();
+    panic!("Breakpoint Exception triggered on CPU {}", cpu_id());
 }
 
 const KERNEL_CS: SegmentSelector = SegmentSelector::new(1, PrivilegeLevel::Ring0);
@@ -197,6 +196,20 @@ extern "C" fn kmain() -> ! {
     assert!(BASE_REVISION.is_supported());
 
     assert!(logger_init());
+
+    let bootloader_info_resp = BOOTLOADER_INFO_REQUEST.get_response();
+    if let Some(resp) = bootloader_info_resp {
+        println!(
+            "\x1b[93mBootloader: {} {}\x1b[m",
+            resp.name(),
+            resp.version()
+        );
+    }
+
+    println!(
+        "\x1b[93mProtocol base revision: {}\x1b[m",
+        BASE_REVISION.loaded_revision().unwrap()
+    );
 
     pmm_init();
 

@@ -1,12 +1,16 @@
 use limine::BaseRevision;
 use limine::request::{
-    FramebufferRequest, HhdmRequest, MemoryMapRequest, MpRequest, RequestsEndMarker,
-    RequestsStartMarker,
+    BootloaderInfoRequest, FramebufferRequest, HhdmRequest, MemoryMapRequest, MpRequest,
+    RequestsEndMarker, RequestsStartMarker,
 };
 
 #[used]
 #[unsafe(link_section = ".requests")]
 pub static BASE_REVISION: BaseRevision = BaseRevision::with_revision(5);
+
+#[used]
+#[unsafe(link_section = ".requests")]
+pub static BOOTLOADER_INFO_REQUEST: BootloaderInfoRequest = BootloaderInfoRequest::new();
 
 #[used]
 #[unsafe(link_section = ".requests")]
