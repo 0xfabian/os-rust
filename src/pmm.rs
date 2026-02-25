@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::println;
 use crate::requests::MEMORY_MAP_REQUEST;
 use crate::sync::SpinLock;

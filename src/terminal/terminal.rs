@@ -91,6 +91,7 @@ struct Theme {
     bright_colors: [u32; 8],
 }
 
+#[allow(unused)]
 const VGA_THEME: Theme = Theme {
     default_fg: 0xC0C0C0, // VGA LIGHT GRAY
     default_bg: 0x000000, // VGA BLACK
@@ -116,6 +117,7 @@ const VGA_THEME: Theme = Theme {
     ],
 };
 
+#[allow(unused)]
 const GRUVBOX_THEME: Theme = Theme {
     default_fg: 0xEBDBB2, // GRUVBOX LIGHT FG
     default_bg: 0x282828, // GRUVBOX DARK BG

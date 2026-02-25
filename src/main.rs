@@ -107,8 +107,8 @@ extern "x86-interrupt" fn breakpoint_handler(_stack_frame: InterruptStackFrame) 
 
 const KERNEL_CS: SegmentSelector = SegmentSelector::new(1, PrivilegeLevel::Ring0);
 const KERNEL_DS: SegmentSelector = SegmentSelector::new(2, PrivilegeLevel::Ring0);
-const USER_DS: SegmentSelector = SegmentSelector::new(3, PrivilegeLevel::Ring3);
-const USER_CS: SegmentSelector = SegmentSelector::new(4, PrivilegeLevel::Ring3);
+const _USER_DS: SegmentSelector = SegmentSelector::new(3, PrivilegeLevel::Ring3);
+const _USER_CS: SegmentSelector = SegmentSelector::new(4, PrivilegeLevel::Ring3);
 
 // Compared to the IDT, the GDT is usually tiny,
 // still, we allocate one page for it, to keep things simple.
