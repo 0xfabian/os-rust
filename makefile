@@ -19,8 +19,7 @@ QEMU_FLAGS := -display sdl \
               -m 1G \
               -drive if=pflash,format=raw,readonly=on,file=$(OVMF_CODE) \
               -drive if=pflash,format=raw,file=$(OVMF_VARS) \
-              -hda $(IMAGE) \
-              -serial stdio
+              -drive file=$(IMAGE),format=raw
 
 .PHONY: all install clean run cargo-build
 
