@@ -2,6 +2,7 @@ use core::cell::UnsafeCell;
 use core::sync::atomic::{AtomicBool, Ordering};
 use x86_64::instructions::interrupts;
 
+#[derive(Debug)]
 pub struct SpinLock<T> {
     lock: AtomicBool,
     data: UnsafeCell<T>,
