@@ -253,3 +253,7 @@ pub fn free_frames(frames: FrameRange) {
 pub fn phys_to_virt(addr: PhysAddr) -> VirtAddr {
     VirtAddr::new(addr.as_u64() + PMM.lock().as_ref().unwrap().hhdm_offset)
 }
+
+pub fn virt_to_phys(addr: VirtAddr) -> PhysAddr {
+    PhysAddr::new(addr.as_u64() - PMM.lock().as_ref().unwrap().hhdm_offset)
+}

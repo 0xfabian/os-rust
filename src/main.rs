@@ -2,6 +2,7 @@
 #![no_main]
 #![feature(abi_x86_interrupt)]
 #![feature(const_array)]
+#![feature(never_type)]
 
 mod logger;
 mod panic;
@@ -18,6 +19,7 @@ use x86_64::registers::model_specific::GsBase;
 use x86_64::registers::segmentation::Segment;
 use x86_64::structures::gdt::{Descriptor, GlobalDescriptorTable, SegmentSelector};
 use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode};
+use x86_64::structures::paging::page;
 use x86_64::{PhysAddr, PrivilegeLevel, VirtAddr};
 
 use crate::panic::idle;
@@ -547,6 +549,50 @@ fn force_switch_to_idle() -> ! {
     panic!("This should never be reached");
 }
 
+trait ThreadGasket {
+    unsafe fn run_and_cleanup(&self, ptr: *mut ()) -> !;
+}
+
+impl<F> ThreadGasket for F
+where
+    F: FnOnce() -> !,
+{
+    unsafe fn run_and_cleanup(&self, ptr: *mut ()) -> ! {
+        // 1. Cast the raw pointer back to the specific closure type
+        let closure_ptr = ptr as *mut F;
+        // 2. Move the closure out of the allocated memory onto the stack
+        let closure = core::ptr::read(closure_ptr);
+        // 3. Call it!
+        closure();
+    }
+}
+
+extern "C" fn thread_trampoline(arg: *mut ()) -> ! {
+    unsafe {
+        // 1. The fat pointer is stored at the start of the page.
+        // It contains: [Pointer to Data, Pointer to VTable]
+        let dyn_ptr = *(arg as *mut *mut dyn ThreadGasket);
+
+        // 2. Call the gasket.
+        // We pass 'arg' because that's where the actual closure 'F' lives.
+        (*dyn_ptr).run_and_cleanup(arg);
+    }
+
+    // This is unreachable currently, but in the future,
+    // the closure will return.
+
+    let virt_addr = VirtAddr::new(arg as u64);
+    let phys_addr = virt_to_phys(virt_addr);
+
+    free_frames(FrameRange {
+        start: phys_addr,
+        count: 1,
+    });
+
+    // This should be actually exit()
+    idle();
+}
+
 impl Thread {
     // Move this on the ready queue of the current CPU and mark it as ready.
     fn ready(&self) {
@@ -561,10 +607,11 @@ impl Thread {
 
     // Spawns a new thread with the given entry point returning it's id.
     // The thread will then be marked as ready and scheduled to run on the current CPU.
-    fn spawn(entry_point: extern "C" fn() -> !) -> Option<u64> {
+    fn low_level_spawn(entry: extern "C" fn(*mut ()) -> !, arg: *mut ()) -> Option<u64> {
         let id = GLOBAL_THREAD_ID_COUNTER.fetch_add(1, Ordering::SeqCst);
         let stack = Stack::new(4); // 4 pages should be enough
-        let regs = CpuRegsOnStack::new_inside_kernel(entry_point as u64, stack.get_top_address());
+        let mut regs = CpuRegsOnStack::new_inside_kernel(entry as u64, stack.get_top_address());
+        regs.rdi = arg as u64;
 
         // write the register to the stack
         let regs_addr = stack.get_top_address() - core::mem::size_of::<CpuRegsOnStack>() as u64;
@@ -592,6 +639,28 @@ impl Thread {
             .unwrap()
             .ready();
         Some(id)
+    }
+
+    fn spawn<F>(f: F) -> Option<u64>
+    where
+        F: FnOnce() -> ! + Send + 'static,
+    {
+        assert!(core::mem::size_of::<F>() < 4096 - 64); // ensure the closure fits in one page with the vtable pointer
+        let page_addr = alloc_frames(1)
+            .map(|f| phys_to_virt(f.start))
+            .expect("Out of memory");
+
+        unsafe {
+            let fat_ptr_slot = page_addr.as_mut_ptr::<*mut dyn ThreadGasket>();
+            // High alignment???
+            let closure_slot = (page_addr.as_u64() + 64) as *mut F;
+
+            closure_slot.write(f);
+            let dyn_ptr: *mut dyn ThreadGasket = closure_slot as *mut dyn ThreadGasket;
+            fat_ptr_slot.write(dyn_ptr);
+        }
+
+        Self::low_level_spawn(thread_trampoline, page_addr.as_mut_ptr::<()>())
     }
 
     // Create an idle thread
@@ -794,7 +863,7 @@ fn setup_sched() {
     // empty for now
 }
 
-const NUM_THREADS: usize = 100;
+const NUM_THREADS: usize = 10;
 
 // Used to split the screen in a grid of n x m, where n * m = NUM_THREADS and n and m are as close as possible.
 fn split_closest_divisors(n: usize) -> (usize, usize) {
@@ -832,29 +901,46 @@ fn get_range_slice(total: usize, parts: usize, index: usize) -> (usize, usize) {
 // don't take this too seriously, it's just for testing the scheduler
 static mut DRAW_AREA: [u32; 1920 * 1080] = [0; 1920 * 1080];
 
-extern "C" fn example_thread() -> ! {
-    let mut num = 0usize;
+struct Rect {
+    x: usize,
+    y: usize,
+    width: usize,
+    height: usize,
+}
 
-    let index = (thread_id() - 1) as usize; // thread_id starts from 1
-    let (n, m) = split_closest_divisors(NUM_THREADS);
-    let xi = index % n;
-    let yi = index / n;
-    let (x_start, x_end) = get_range_slice(1920, n, xi);
-    let (y_start, y_end) = get_range_slice(1080, m, yi);
-
-    loop {
-        for y in y_start..y_end {
-            for x in x_start..x_end {
-                let offset = y * 1920 + x;
-                let n = num / 10 % 256;
-                let color = (n << 16) | (n << 8) | n; // grayscale color
-                unsafe {
-                    core::ptr::write(&mut DRAW_AREA[offset], color as u32);
-                }
+fn fill_rect(rect: Rect, color: u32) {
+    for y in rect.y..rect.y + rect.height {
+        for x in rect.x..rect.x + rect.width {
+            let offset = y * 1920 + x;
+            unsafe {
+                core::ptr::write(&mut DRAW_AREA[offset], color);
             }
         }
+    }
+}
 
-        num += 1;
+fn get_random(min: usize, max: usize) -> usize {
+    min + (random_u64() as usize % (max - min))
+}
+
+fn get_random_rect_in_screen() -> Rect {
+    let width = get_random(10, 11);
+    let height = get_random(10, 11);
+    let x = get_random(0, 1920 - width);
+    let y = get_random(0, 1080 - height);
+    Rect {
+        x,
+        y,
+        width,
+        height,
+    }
+}
+
+fn example_thread() -> ! {
+    loop {
+        let rect = get_random_rect_in_screen();
+        let color = random_u64() as u32;
+        fill_rect(rect, color);
     }
 }
 
@@ -872,7 +958,7 @@ pub unsafe extern "C" fn fast_blit(dst: *mut u8, src: *const u8, bytes: usize) {
 }
 
 // This completely ignores the "terminal" logic but whatever.
-extern "C" fn blit_thread() -> ! {
+fn blit_thread() -> ! {
     let fb_resp = FRAMEBUFFER_REQUEST
         .get_response()
         .expect("Framebuffer request failed");
@@ -915,9 +1001,12 @@ extern "C" fn common_entry(cpu: &limine::mp::Cpu) -> ! {
 
     if cpu_id() == 0 {
         for _ in 0..NUM_THREADS {
-            Thread::spawn(example_thread);
+            Thread::spawn(|| {
+                loop {
+                    println!("Hello from thread {} on CPU {}", thread_id(), cpu_id());
+                }
+            });
         }
-        Thread::spawn(blit_thread);
     }
 
     // At this point we lose the current stack allocated by limine,
