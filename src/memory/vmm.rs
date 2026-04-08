@@ -1,4 +1,4 @@
-use crate::memory::pmm::{alloc_frames, phys_to_virt};
+use crate::memory::{alloc_frame, phys_to_virt};
 use x86_64::PhysAddr;
 use x86_64::structures::paging::{PageTable, PageTableFlags};
 
@@ -16,10 +16,10 @@ pub fn map_page(phys: u64, virt: u64) {
     let pdpt_entry = &mut pdpt[pdpt_index as usize];
 
     if !pdpt_entry.flags().contains(PageTableFlags::PRESENT) {
-        let new_page = alloc_frames(1).unwrap();
+        let new_page = alloc_frame().unwrap();
 
         pdpt_entry.set_addr(
-            new_page.start,
+            new_page.addr(),
             PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
         );
     }
@@ -29,10 +29,10 @@ pub fn map_page(phys: u64, virt: u64) {
     let pd_entry = &mut pd[pd_index as usize];
 
     if !pd_entry.flags().contains(PageTableFlags::PRESENT) {
-        let new_page = alloc_frames(1).unwrap();
+        let new_page = alloc_frame().unwrap();
 
         pd_entry.set_addr(
-            new_page.start,
+            new_page.addr(),
             PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
         );
     }

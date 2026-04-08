@@ -1,5 +1,5 @@
 use crate::arch::x86_64::cpu::TlsData;
-use crate::memory::pmm::{alloc_frames, phys_to_virt};
+use crate::memory::{alloc_frame, phys_to_virt};
 use x86_64::PrivilegeLevel;
 use x86_64::instructions::segmentation::{CS, DS, ES, FS, GS, SS};
 use x86_64::registers::model_specific::GsBase;
@@ -14,8 +14,8 @@ pub const _USER_CS: SegmentSelector = SegmentSelector::new(4, PrivilegeLevel::Ri
 // Compared to the IDT, the GDT is usually tiny,
 // still, we allocate one page for it, to keep things simple.
 fn alloc_gdt() -> &'static mut GlobalDescriptorTable<7> {
-    let gdt_addr = alloc_frames(1)
-        .map(|f| phys_to_virt(f.start))
+    let gdt_addr = alloc_frame()
+        .map(|f| phys_to_virt(f.addr()))
         .expect("Out of memory");
 
     // We need 7 entries:

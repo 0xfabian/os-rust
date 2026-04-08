@@ -17,7 +17,7 @@ use crate::arch::x86_64::init::common_entry;
 use crate::arch::x86_64::lapic::lapic_phys_addr;
 use crate::boot::requests::{BASE_REVISION, BOOTLOADER_INFO_REQUEST, MP_REQUEST};
 use crate::dev::console;
-use crate::memory::pmm::{phys_to_virt, pmm_init};
+use crate::memory::phys_to_virt;
 use crate::memory::vmm::map_page;
 use x86_64::PhysAddr;
 
@@ -41,7 +41,7 @@ extern "C" fn kmain() -> ! {
         BASE_REVISION.loaded_revision().unwrap()
     );
 
-    pmm_init();
+    memory::init();
 
     // I also experimented with the ACPI RSDP table, and we should probably use that
     // to find the LAPIC address since the MSR isn't a portable way to get it.

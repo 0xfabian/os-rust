@@ -1,5 +1,5 @@
 use crate::arch::x86_64::cpu::{TlsData, current_cpu_id};
-use crate::memory::pmm::{alloc_frames, phys_to_virt};
+use crate::memory::{alloc_frame, phys_to_virt};
 use crate::sched::timer_interrupt;
 use x86_64::PrivilegeLevel;
 use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode};
@@ -7,8 +7,8 @@ use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame, Pag
 // The IDT structure fits perfectly in one page,
 // so we allocate one page and store the IDT there.
 fn alloc_idt() -> &'static mut InterruptDescriptorTable {
-    let idt_addr = alloc_frames(1)
-        .map(|f| phys_to_virt(f.start))
+    let idt_addr = alloc_frame()
+        .map(|f| phys_to_virt(f.addr()))
         .expect("Out of memory");
 
     assert!(core::mem::size_of::<InterruptDescriptorTable>() == 4096);

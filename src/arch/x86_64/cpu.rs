@@ -1,4 +1,4 @@
-use crate::memory::pmm::{alloc_frames, phys_to_virt};
+use crate::memory::{alloc_frame, phys_to_virt};
 use crate::sched::thread::{Queue, Thread};
 use crate::sync::SpinLock;
 use x86_64::VirtAddr;
@@ -54,8 +54,8 @@ pub struct TlsData {
 }
 
 fn alloc_tls() -> &'static mut TlsData {
-    let tls_addr = alloc_frames(1)
-        .map(|f| phys_to_virt(f.start))
+    let tls_addr = alloc_frame()
+        .map(|f| phys_to_virt(f.addr()))
         .expect("Out of memory");
 
     assert!(core::mem::size_of::<TlsData>() <= 4096);

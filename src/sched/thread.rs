@@ -1,6 +1,6 @@
 use crate::arch::x86_64::cpu::{current_cpu, idle};
 use crate::arch::x86_64::gdt::{KERNEL_CS, KERNEL_DS};
-use crate::memory::pmm::{alloc_frames, phys_to_virt};
+use crate::memory::{alloc_frame, alloc_frames, phys_to_virt};
 use crate::sync::SpinLock;
 use core::mem::MaybeUninit;
 use core::sync::atomic::{AtomicU64, Ordering};
@@ -70,7 +70,7 @@ pub struct Stack {
 impl Stack {
     pub fn new(num_pages: usize) -> Self {
         let stack_addr = alloc_frames(num_pages)
-            .map(|f| phys_to_virt(f.start))
+            .map(|f| phys_to_virt(f.start.addr()))
             .expect("Out of memory");
 
         Stack {
@@ -284,8 +284,8 @@ impl Thread {
     {
         // Ensure the closure fits in one page along with the vtable pointer.
         assert!(core::mem::size_of::<F>() < 4096 - 64);
-        let page_addr = alloc_frames(1)
-            .map(|f| phys_to_virt(f.start))
+        let page_addr = alloc_frame()
+            .map(|f| phys_to_virt(f.addr()))
             .expect("Out of memory");
 
         unsafe {

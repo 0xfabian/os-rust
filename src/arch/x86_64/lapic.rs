@@ -1,4 +1,4 @@
-use crate::memory::pmm::phys_to_virt;
+use crate::memory::phys_to_virt;
 use x86_64::PhysAddr;
 
 pub struct Lapic {
