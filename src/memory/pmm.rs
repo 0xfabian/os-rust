@@ -1,7 +1,5 @@
-#![allow(dead_code)]
-
+use crate::boot::requests::{HHDM_REQUEST, MEMORY_MAP_REQUEST};
 use crate::println;
-use crate::requests::MEMORY_MAP_REQUEST;
 use crate::sync::SpinLock;
 use x86_64::{PhysAddr, VirtAddr};
 
@@ -115,7 +113,7 @@ pub struct PhysicalMemoryManager<'a> {
 impl<'a> PhysicalMemoryManager<'a> {
     fn new() -> Self {
         let mm_resp = MEMORY_MAP_REQUEST.get_response().unwrap();
-        let hhdm_resp = crate::requests::HHDM_REQUEST.get_response().unwrap();
+        let hhdm_resp = HHDM_REQUEST.get_response().unwrap();
 
         // layout will be like this global PMM
         // MemoryRegion[] | Bitmap data | Bitmap data | ...

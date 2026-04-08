@@ -1,12 +1,6 @@
+use crate::arch::x86_64::cpu::idle;
 use crate::println;
 use core::panic::PanicInfo;
-use x86_64::instructions::hlt;
-
-pub fn idle() -> ! {
-    loop {
-        hlt();
-    }
-}
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {

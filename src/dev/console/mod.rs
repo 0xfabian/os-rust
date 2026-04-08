@@ -1,11 +1,14 @@
-use crate::requests::FRAMEBUFFER_REQUEST;
+mod font;
+mod terminal;
+
+use crate::boot::requests::FRAMEBUFFER_REQUEST;
 use crate::sync::SpinLock;
-use crate::terminal::terminal::Terminal;
 use core::fmt::Write;
+use terminal::Terminal;
 
-pub static GLOBAL_TERMINAL: SpinLock<Option<Terminal>> = SpinLock::new(None);
+static GLOBAL_TERMINAL: SpinLock<Option<Terminal>> = SpinLock::new(None);
 
-pub fn logger_init() -> bool {
+pub fn init() -> bool {
     let fb = FRAMEBUFFER_REQUEST
         .get_response()
         .and_then(|resp| resp.framebuffers().next());
@@ -33,7 +36,7 @@ pub fn log(args: core::fmt::Arguments) {
 #[macro_export]
 macro_rules! print {
     ($($arg:tt)*) => {
-        $crate::log(format_args!($($arg)*));
+        $crate::dev::console::log(format_args!($($arg)*));
     };
 }
 
@@ -41,6 +44,6 @@ macro_rules! print {
 macro_rules! println {
     () => ($crate::print!("\n"));
     ($($arg:tt)*) => {
-        $crate::log(format_args!("{}\n", format_args!($($arg)*)));
+        $crate::dev::console::log(format_args!("{}\n", format_args!($($arg)*)));
     };
 }
