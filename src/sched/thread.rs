@@ -70,7 +70,7 @@ pub struct Stack {
 impl Stack {
     pub fn new(num_pages: usize) -> Self {
         let stack_addr = alloc_frames(num_pages)
-            .map(|f| phys_to_virt(f.start.addr()))
+            .map(|f| phys_to_virt(f.start_addr()))
             .expect("Out of memory");
 
         Stack {

@@ -1,8 +1,6 @@
 use x86_64::PhysAddr;
 
 pub const FRAME_SIZE: usize = 4096;
-pub const FRAME_SHIFT: usize = 12;
-pub const FRAME_MASK: u64 = FRAME_SIZE as u64 - 1;
 
 /// A 4 KiB physical frame, identified by its base address.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -11,7 +9,7 @@ pub struct Frame(pub PhysAddr);
 impl Frame {
     pub fn new(addr: PhysAddr) -> Self {
         assert!(
-            addr.as_u64() & FRAME_MASK == 0,
+            addr.is_aligned(FRAME_SIZE as u64),
             "frame address must be {}-byte aligned",
             FRAME_SIZE
         );
@@ -24,10 +22,29 @@ impl Frame {
 }
 
 /// A contiguous run of physical frames.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FrameRange {
-    pub start: Frame,
+    pub start: PhysAddr,
     pub count: usize,
+}
+
+impl FrameRange {
+    pub fn new(start: PhysAddr, count: usize) -> Self {
+        assert!(
+            start.is_aligned(FRAME_SIZE as u64),
+            "frame range start address must be {}-byte aligned",
+            FRAME_SIZE
+        );
+        FrameRange { start, count }
+    }
+
+    pub fn start_addr(self) -> PhysAddr {
+        self.start
+    }
+
+    pub fn end_addr(self) -> PhysAddr {
+        self.start + (self.count as u64 * FRAME_SIZE as u64)
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -44,17 +61,14 @@ pub trait FrameAllocator: Send + Sync {
     fn alloc(&self, count: usize) -> Result<FrameRange, FrameAllocError>;
     fn dealloc(&self, frames: FrameRange);
 
-    fn total_frames(&self) -> usize;
-    fn free_frames(&self) -> usize;
-
     fn alloc_one(&self) -> Result<Frame, FrameAllocError> {
-        self.alloc(1).map(|r| r.start)
+        self.alloc(1).map(|r| Frame::new(r.start_addr()))
     }
 
     fn dealloc_one(&self, frame: Frame) {
-        self.dealloc(FrameRange {
-            start: frame,
-            count: 1,
-        });
+        self.dealloc(FrameRange::new(frame.addr(), 1));
     }
+
+    fn total_frames(&self) -> usize;
+    fn free_frames(&self) -> usize;
 }

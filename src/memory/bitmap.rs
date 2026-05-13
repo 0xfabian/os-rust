@@ -14,9 +14,7 @@
 //! from any CPU.
 
 use crate::boot::requests::{HHDM_REQUEST, MEMORY_MAP_REQUEST};
-use crate::memory::frame::{
-    FRAME_SIZE, Frame, FrameAllocError, FrameAllocator, FrameRange,
-};
+use crate::memory::frame::{FRAME_SIZE, FrameAllocError, FrameAllocator, FrameRange};
 use crate::println;
 use crate::sync::SpinLock;
 use x86_64::PhysAddr;
@@ -77,10 +75,7 @@ impl<'a> MemoryRegion<'a> {
                         self.bitmap.set(j);
                     }
                     let addr = self.start + (start_index as u64 * FRAME_SIZE as u64);
-                    return Some(FrameRange {
-                        start: Frame::new(addr),
-                        count,
-                    });
+                    return Some(FrameRange::new(addr, count));
                 }
             } else {
                 consecutive_free = 0;
@@ -91,7 +86,7 @@ impl<'a> MemoryRegion<'a> {
     }
 
     fn dealloc(&mut self, frames: FrameRange) {
-        let offset = frames.start.addr().as_u64() - self.start.as_u64();
+        let offset = frames.start.as_u64() - self.start.as_u64();
         let start_index = offset as usize / FRAME_SIZE;
         for i in start_index..start_index + frames.count {
             self.bitmap.clear(i);
@@ -102,15 +97,15 @@ impl<'a> MemoryRegion<'a> {
     // during init to reserve frames the allocator must never hand out
     // (e.g. the bitmap data itself).
     fn reserve(&mut self, frames: FrameRange) {
-        let offset = frames.start.addr().as_u64() - self.start.as_u64();
+        let offset = frames.start.as_u64() - self.start.as_u64();
         let start_index = offset as usize / FRAME_SIZE;
         for i in start_index..start_index + frames.count {
             self.bitmap.set(i);
         }
     }
 
-    fn contains(&self, frame: Frame) -> bool {
-        frame.addr() >= self.start && frame.addr() < self.end
+    fn contains(&self, addr: PhysAddr) -> bool {
+        addr >= self.start && addr < self.end
     }
 
     fn total_frames(&self) -> usize {
@@ -225,10 +220,8 @@ impl BitmapFrameAllocator {
                         "Reserving allocator data frames at physical address: {:#018x}",
                         entry.base
                     );
-                    region_slice[ri].reserve(FrameRange {
-                        start: Frame::new(PhysAddr::new(entry.base)),
-                        count: frames_needed,
-                    });
+                    region_slice[ri]
+                        .reserve(FrameRange::new(PhysAddr::new(entry.base), frames_needed));
 
                     let mut slot = self.inner.lock();
                     assert!(slot.is_none(), "BitmapFrameAllocator already initialized");
